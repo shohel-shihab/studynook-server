@@ -1,7 +1,7 @@
 const express = require("express");
 require('dotenv').config();
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -32,6 +32,56 @@ async function run() {
     const roomsCollection = database.collection("rooms");
 
     //add room related api
+    app.get("/rooms", async (req, res) => {
+      const {
+        search = "",
+        minPrice,
+        maxPrice,
+        amenities,
+      } = req.query;
+      let query = {};
+
+      if (search) {
+        query.roomName = {
+          $regex: search,
+          $options: "i",
+        };
+      }
+
+      if (minPrice || maxPrice) {
+        query.hourlyRate = {};
+
+        if (minPrice) {
+          query.hourlyRate.$gte = Number(minPrice);
+        }
+
+        if (maxPrice) {
+          query.hourlyRate.$lte = Number(maxPrice);
+        }
+      }
+      if (amenities) {
+        query.amenities = {
+          $all: amenities.split(","),
+        };
+      }
+
+      const result = await roomsCollection
+        .find(query)
+        .limit(12)
+        .toArray();
+      res.send(result);
+    });
+
+    app.get("/rooms/:id", async (req, res) => {
+      const id = req.params.id;
+      const room = await roomsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      res.send(room);
+    });
+
+
+
 
     app.post("/rooms", async (req, res) => {
       try {
