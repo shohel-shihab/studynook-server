@@ -30,6 +30,7 @@ async function run() {
 
     const database = client.db("studynookDb");
     const roomsCollection = database.collection("rooms");
+    const bookingCollection = database.collection("bookings");
 
     //add room related api
     app.get("/rooms", async (req, res) => {
@@ -80,7 +81,14 @@ async function run() {
       res.send(room);
     });
 
+    app.delete("/rooms/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await roomsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
 
+      res.send(result);
+    });
 
 
     app.post("/rooms", async (req, res) => {
@@ -100,6 +108,54 @@ async function run() {
         });
       }
     });
+
+    //booking related api 
+
+    app.get("/booking/:userId", async (req, res) => {
+      try {
+        const userId = req.params.userId;
+        const result = await bookingCollection
+          .find({ userId }).sort({ createdAt: -1 }).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
+    });
+    app.post("/booking", async (req, res) => {
+      try {
+        const bookingInfo = req.body;
+        bookingInfo.createdAt =
+          new Date();
+        const result = await bookingCollection.insertOne(bookingInfo);
+        res.send({
+          success: true,
+          insertedId:
+            result.insertedId,
+        });
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
+    });
+
+    // featured related api 
+    app.get("/features", async (req, res) => {
+      const result = await roomsCollection
+        .find()
+        .sort({ _id: -1 })
+        .limit(6)
+        .toArray();
+
+      res.send(result);
+    });
+
+
+
 
 
 
