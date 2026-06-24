@@ -195,12 +195,38 @@ async function run() {
 
     //booking related api 
 
-    app.get("/booking/:userId", async (req, res) => {
+    app.get("/my-bookings/:userId", async (req, res) => {
       try {
-        const userId = req.params.userId;
-        const result = await bookingCollection
-          .find({ userId }).sort({ createdAt: -1 }).toArray();
-        res.send(result);
+        const { userId } = req.params;
+
+        const bookings =
+          await bookingCollection
+            .find({ userId })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        const bookingsWithRooms =
+          await Promise.all(
+            bookings.map(async (booking) => {
+              const room =
+                await roomsCollection.findOne({
+                  _id: new ObjectId(
+                    booking.roomId
+                  ),
+                });
+
+              return {
+                ...booking,
+                roomImage:
+                  room?.image || "",
+                roomName:
+                  room?.roomName ||
+                  booking.roomName,
+              };
+            })
+          );
+
+        res.send(bookingsWithRooms);
       } catch (error) {
         res.status(500).send({
           success: false,
@@ -208,16 +234,130 @@ async function run() {
         });
       }
     });
-    app.post("/booking", async (req, res) => {
+
+    app.patch(
+      "/bookings/:id/cancel",
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+
+          const booking =
+            await bookingCollection.findOne({
+              _id: new ObjectId(id),
+            });
+
+          if (!booking) {
+            return res.status(404).send({
+              success: false,
+              message: "Booking not found",
+            });
+          }
+
+          const result =
+            await bookingCollection.updateOne(
+              {
+                _id: new ObjectId(id),
+              },
+              {
+                $set: {
+                  status: "cancelled",
+                },
+              }
+            );
+
+          // decrease booking count
+          await roomsCollection.updateOne(
+            {
+              _id: new ObjectId(
+                booking.roomId
+              ),
+            },
+            {
+              $inc: {
+                bookingCount: -1,
+              },
+            }
+          );
+
+          res.send({
+            success: true,
+            modifiedCount:
+              result.modifiedCount,
+          });
+        } catch (error) {
+          res.status(500).send({
+            success: false,
+            message: error.message,
+          });
+        }
+      }
+    );
+
+
+    app.post("/bookings", async (req, res) => {
       try {
         const bookingInfo = req.body;
+
+        const {
+          roomId,
+          date,
+          startTime,
+          endTime,
+        } = bookingInfo;
+
+        // Check conflict
+        const conflict =
+          await bookingCollection.findOne({
+            roomId,
+            date,
+            status: "confirmed",
+
+            startTime: {
+              $lt: endTime,
+            },
+
+            endTime: {
+              $gt: startTime,
+            },
+          });
+
+        if (conflict) {
+          return res.status(400).send({
+            success: false,
+            message:
+              "This time slot is already booked",
+          });
+        }
+
+        bookingInfo.status =
+          "confirmed";
+
         bookingInfo.createdAt =
           new Date();
-        const result = await bookingCollection.insertOne(bookingInfo);
+
+        const result =
+          await bookingCollection.insertOne(
+            bookingInfo
+          );
+
+        // Increment booking count
+        await roomsCollection.updateOne(
+          {
+            _id: new ObjectId(roomId),
+          },
+          {
+            $inc: {
+              bookingCount: 1,
+            },
+          }
+        );
+
         res.send({
           success: true,
           insertedId:
             result.insertedId,
+          message:
+            "Room booked successfully",
         });
       } catch (error) {
         res.status(500).send({
@@ -228,14 +368,22 @@ async function run() {
     });
 
     // featured related api 
-    app.get("/features", async (req, res) => {
-      const result = await roomsCollection
-        .find()
-        .sort({ _id: -1 })
-        .limit(6)
-        .toArray();
+    app.get("/featured-rooms", async (req, res) => {
+      try {
+        const rooms =
+          await roomsCollection
+            .find()
+            .sort({ createdAt: -1 })
+            .limit(6)
+            .toArray();
 
-      res.send(result);
+        res.send(rooms);
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
     });
 
 
