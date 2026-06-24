@@ -34,45 +34,52 @@ async function run() {
 
     //add room related api
     app.get("/rooms", async (req, res) => {
-      const {
-        search = "",
-        minPrice,
-        maxPrice,
-        amenities,
-      } = req.query;
-      let query = {};
+      try {
+        const {
+          search = "",
+          minPrice,
+          maxPrice,
+          amenities,
+        } = req.query;
 
-      if (search) {
-        query.roomName = {
-          $regex: search,
-          $options: "i",
-        };
-      }
+        let query = {};
 
-      if (minPrice || maxPrice) {
-        query.hourlyRate = {};
-
-        if (minPrice) {
-          query.hourlyRate.$gte = Number(minPrice);
+        if (search) {
+          query.roomName = {
+            $regex: search,
+            $options: "i",
+          };
         }
 
-        if (maxPrice) {
-          query.hourlyRate.$lte = Number(maxPrice);
-        }
-      }
-      if (amenities) {
-        query.amenities = {
-          $all: amenities.split(","),
-        };
-      }
+        if (minPrice || maxPrice) {
+          query.hourlyRate = {};
 
-      const result = await roomsCollection
-        .find(query)
-        .limit(12)
-        .toArray();
-      res.send(result);
+          if (minPrice)
+            query.hourlyRate.$gte = Number(minPrice);
+
+          if (maxPrice)
+            query.hourlyRate.$lte = Number(maxPrice);
+        }
+
+        if (amenities) {
+          query.amenities = {
+            $all: amenities.split(","),
+          };
+        }
+
+        const rooms = await roomsCollection
+          .find(query)
+          .sort({ _id: -1 })
+          .toArray();
+
+        res.send(rooms);
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
     });
-
     app.get("/rooms/:id", async (req, res) => {
       const id = req.params.id;
       const room = await roomsCollection.findOne({
@@ -81,25 +88,43 @@ async function run() {
       res.send(room);
     });
 
-    app.delete("/rooms/:id", async (req, res) => {
-      const id = req.params.id;
-      const result = await roomsCollection.deleteOne({
-        _id: new ObjectId(id),
-      });
 
-      res.send(result);
-    });
-
-
-    app.post("/rooms", async (req, res) => {
+    app.put("/rooms/:id", async (req, res) => {
       try {
-        const roomData = req.body;
-        roomData.createdAt = new Date();
-        const result = await roomsCollection.insertOne(roomData);
-        res.status(201).send({
+        const { id } = req.params;
+        const updatedData = req.body;
+
+        const room = await roomsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!room) {
+          return res.status(404).send({
+            success: false,
+            message: "Room not found",
+          });
+        }
+
+        // Verify owner
+        if (room.ownerId !== updatedData.userId) {
+          return res.status(403).send({
+            success: false,
+            message: "Unauthorized",
+          });
+        }
+
+        delete updatedData.userId;
+
+        const result = await roomsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: updatedData,
+          }
+        );
+
+        res.send({
           success: true,
-          message: "Room Added Successfully",
-          insertedId: result.insertedId,
+          modifiedCount: result.modifiedCount,
         });
       } catch (error) {
         res.status(500).send({
@@ -108,6 +133,65 @@ async function run() {
         });
       }
     });
+
+
+    app.delete("/rooms/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { userId } = req.body;
+
+        const room = await roomsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!room) {
+          return res.status(404).send({
+            success: false,
+            message: "Room not found",
+          });
+        }
+
+        if (room.ownerId !== userId) {
+          return res.status(403).send({
+            success: false,
+            message: "Unauthorized access",
+          });
+        }
+
+        const result = await roomsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        res.send({
+          success: true,
+          deletedCount: result.deletedCount,
+        });
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
+    });
+
+
+    // app.post("/rooms", async (req, res) => {
+    //   try {
+    //     const roomData = req.body;
+    //     roomData.createdAt = new Date();
+    //     const result = await roomsCollection.insertOne(roomData);
+    //     res.status(201).send({
+    //       success: true,
+    //       message: "Room Added Successfully",
+    //       insertedId: result.insertedId,
+    //     });
+    //   } catch (error) {
+    //     res.status(500).send({
+    //       success: false,
+    //       message: error.message,
+    //     });
+    //   }
+    // });
 
     //booking related api 
 
