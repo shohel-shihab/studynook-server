@@ -44,7 +44,7 @@ const verifyToken = async(req, res, next) => {
      next()
   }
   catch (error) {
-    return res.status(403).josn({ message: "Forbidden" })
+    return res.status(403).json({ message: "Forbidden" })
 
   }
 
@@ -205,25 +205,7 @@ async function run() {
     });
 
 
-    // app.post("/rooms", async (req, res) => {
-    //   try {
-    //     const roomData = req.body;
-    //     roomData.createdAt = new Date();
-    //     const result = await roomsCollection.insertOne(roomData);
-    //     res.status(201).send({
-    //       success: true,
-    //       message: "Room Added Successfully",
-    //       insertedId: result.insertedId,
-    //     });
-    //   } catch (error) {
-    //     res.status(500).send({
-    //       success: false,
-    //       message: error.message,
-    //     });
-    //   }
-    // });
 
-    //booking related api 
 
     app.get("/my-bookings/:userId", async (req, res) => {
       try {
